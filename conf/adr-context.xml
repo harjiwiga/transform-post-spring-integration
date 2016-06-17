@@ -1,0 +1,960 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:gfe="http://www.springframework.org/schema/gemfire"
+       xmlns:int-gfe="http://www.springframework.org/schema/integration/gemfire"
+       xmlns:int-http="http://www.springframework.org/schema/integration/http"
+       xmlns:int-jmx="http://www.springframework.org/schema/integration/jmx"
+       xmlns:int-stream="http://www.springframework.org/schema/integration/stream"
+       xmlns:util="http://www.springframework.org/schema/util"
+       xmlns:int-file="http://www.springframework.org/schema/integration/file"
+       xmlns:int="http://www.springframework.org/schema/integration"
+       xmlns:task="http://www.springframework.org/schema/task"
+       xmlns:int-jdbc="http://www.springframework.org/schema/integration/jdbc"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.2.xsd
+           http://www.springframework.org/schema/integration http://www.springframework.org/schema/integration/spring-integration-4.2.xsd
+           http://www.springframework.org/schema/integration/file http://www.springframework.org/schema/integration/file/spring-integration-file-4.2.xsd
+           http://www.springframework.org/schema/task http://www.springframework.org/schema/task/spring-task-4.1.xsd
+           http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-4.2.xsd
+           http://www.springframework.org/schema/integration/stream http://www.springframework.org/schema/integration/stream/spring-integration-stream-4.2.xsd
+           http://www.springframework.org/schema/integration/gemfire http://www.springframework.org/schema/integration/gemfire/spring-integration-gemfire-4.2.xsd
+           http://www.springframework.org/schema/gemfire http://www.springframework.org/schema/gemfire/spring-gemfire-1.2.xsd
+           http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-2.5.xsd
+           http://www.springframework.org/schema/integration/jmx http://www.springframework.org/schema/integration/jmx/spring-integration-jmx-4.2.xsd
+           http://www.springframework.org/schema/integration/http http://www.springframework.org/schema/integration/http/spring-integration-http-4.2.xsd
+           http://www.springframework.org/schema/security http://www.springframework.org/schema/security/spring-security-3.2.xsd
+           http://www.springframework.org/schema/integration/jdbc http://www.springframework.org/schema/integration/jdbc/spring-integration-jdbc-4.2.xsd">
+
+    <context:mbean-server/>
+    <int-jmx:mbean-export id="integrationMBeanExporter" default-domain="spring.application"/>
+
+    <context:mbean-export default-domain="spring.application"/>
+    <int:annotation-config/>
+
+    <!--<util:constant id="sasdirConstant"  static-field="id.lsa.scb.spring.integration.IntegrationMain.sasdir" />-->
+
+    <util:constant id="pojoUtil" static-field="id.lsa.scb.spring.integration.IntegrationMain.adrUtil"/>
+
+    <context:component-scan base-package="id.lsa.scb.spring.integration,id.lsa.scb"/>
+    <!--<context:component-scan base-package="org.springframework.web*"/>-->
+    <bean id="restTemplate" class="org.springframework.web.client.RestTemplate"/>
+    <bean id="objectMapper" class="com.fasterxml.jackson.databind.ObjectMapper"/>
+    <bean id="JobMessage" class="id.lsa.scb.mappers.JobMessage"/>
+    <!--<context:component-scan base-package="org.springframework.web"/>-->
+
+    <!--load properties form config.properties-->
+    <!--id.lsa.scb.utils-->
+    <!--<bean id="propertyPlaceholder" class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">-->
+    <bean id="propertyPlaceholder" class="id.lsa.scb.utils.PropertiesUtil">
+        <!--<property name="ignoreResourceNotFound" value="true"/>-->
+        <property name="locations">
+            <list>
+                <value>file:./conf/config.properties</value>
+                <value>file:./conf/datameer.properties</value>
+            </list>
+        </property>
+    </bean>
+
+    <!--<bean id="datameerConfiguration" class="id.lsa.scb.utils.PropertiesUtil">-->
+
+    <!--</bean>-->
+
+    <!--load log4j configuration-->
+    <bean id="log4jInitialization"
+          class="org.springframework.beans.factory.config.MethodInvokingFactoryBean">
+        <property name="targetClass" value="org.springframework.util.Log4jConfigurer"/>
+        <property name="targetMethod" value="initLogging"/>
+        <property name="arguments">
+            <list>
+                <value>file:./conf/log4j.properties</value>
+            </list>
+        </property>
+    </bean>
+
+    <!--channel-->
+    <!--<int:channel id="filesIn"></int:channel>-->
+    <!--<int:channel id="outJsonMap"></int:channel>-->
+
+    <int:publish-subscribe-channel id="outJsonMap" task-executor="executor">
+        <!--<int:queue capacity="3"/>-->
+
+    </int:publish-subscribe-channel>
+
+
+    <int:channel id="outJsons">
+
+    </int:channel>
+
+    <int:channel id="outJobs">
+        <!--<int:queue capacity="3"/>-->
+        <int:queue/>
+    </int:channel>
+
+    <int:channel id="ImportJsonChannel">
+        <!--<int:queue/>-->
+    </int:channel>
+    <int:channel id="WorkbookJsonChannel">
+        <int:queue/>
+    </int:channel>
+    <int:channel id="ExportJsonChannel">
+        <int:queue/>
+    </int:channel>
+
+    <int:channel id="ImportJsonChannel.reply">
+        <!--<int:queue/>-->
+    </int:channel>
+    <int:channel id="reply.WorkbookJsonChannel">
+        <int:queue/>
+    </int:channel>
+    <int:channel id="reply.ExportJsonChannel">
+        <int:queue/>
+    </int:channel>
+
+    <!--<int:channel id="errorChannel"></int:channel>-->
+
+    <!--<int:header name="fileName" expression="payload.getName()"/>-->
+
+    <int:chain input-channel="filesInChannel" output-channel="outJsonMap">
+
+
+        <int:transformer id="confCombiner" ref="serviceCombiner" method="addConfig"/>
+
+        <int:header-enricher>
+            <int:header name="fileMatchConf" expression="payload.get('matchConf')"/>
+            <int:header name="fileName" expression="payload.get('file').getName()"/>
+            <!--<int:header name="tableName" expression="payload.get('tableName')"/>-->
+        </int:header-enricher>
+
+        <int:transformer expression="payload.get('file')"/>
+
+        <int:transformer id="sasTransformer" ref="serviceTransformer" method="process"/>
+    </int:chain>
+
+
+    <int-stream:stdout-channel-adapter channel="outJsonMap"/>
+
+    <!--<int:transformer id="sasTransformer" input-channel="filesInChannel" method="process"-->
+    <!--output-channel="outJsonMap" ref="serviceTransformer">-->
+    <!--&lt;!&ndash;<int:poller ref="globalPoller"/>&ndash;&gt;-->
+    <!--</int:transformer>-->
+
+
+    <bean id="serviceTransformer" class="id.lsa.scb.spring.integration.transformers.FieldToJson"/>
+    <bean id="serviceCombiner" class="id.lsa.scb.spring.integration.transformers.ServiceCombiner">
+        <property name="adrUtil" ref="pojoUtil"/>
+    </bean>
+    <!--<bean id="httpResponseTransformer" class="id.lsa.scb.spring.integration.transformers.HttpResponseTransformer"/>-->
+
+    <!--<int:splitter id="sasSplitter" input-channel="outJsonMap" output-channel="outJobs" method="split" ref="sasSplitter">-->
+
+    <!--</int:splitter>-->
+    <!--<bean id ="sasSplitter" class="id.lsa.scb.spring.integration.routers.SasSplitter"/>-->
+
+    <!-- ================================= routers ============================================ -->
+
+    <bean id="importJob" class="id.lsa.scb.mappers.importjob.ImportJob"/>
+
+
+    <!--===================important===============-->
+    <!-- uncomment to turn on gemfire metadata-->
+    <!--<gfe:cache/>-->
+    <!--<gfe:replicated-region id="region"/>-->
+
+    <!-- =========== =============== =============== -->
+
+
+    <!--<int-gfe:inbound-channel-adapter id="filesInChannel" />-->
+
+    <!--<gfe:cache/>-->
+    <!--<gfe:replicated-region id="region"/>-->
+
+    <!--<gfe:cache/>-->
+    <!--<gfe:replicated-region id="region"/>-->
+    <!--&lt;!&ndash;<int-gfe:inbound-channel-adapter id="filesInChannel" />&ndash;&gt;-->
+    <!--<int-gfe:inbound-channel-adapter id="filesInChannel" region="region" cache-events="CREATED" expression="newValue"/>-->
+
+    <int:publish-subscribe-channel id="filesInChannel" task-executor="executor">
+
+        <!--<int:dispatcher task-executor="executor"/>-->
+    </int:publish-subscribe-channel>
+
+    <int:channel id="filesOutChannel">
+        <!--<int:dispatcher task-executor="executor"/>-->
+        <int:queue/>
+    </int:channel>
+
+    <bean id="fileHandler" class="id.lsa.scb.spring.integration.handlers.FileHandler"></bean>
+
+
+    <!--important-->
+    <!--filter="compositeFilter"  prevent-duplicates="true"-->
+    <!--sasdirConstant/${sas.dir}-->
+    <int-file:inbound-channel-adapter id="filesInAdapter" directory="#{pojoUtil.sourceRootDir}" auto-create-directory="true"
+                                      channel="filesInChannel" scanner="watchDirectoryScanner" auto-startup="true">
+        <int:poller ref="globalPoller"/>
+
+
+        <!--max-messages-per-poll="1"-->
+        <!--<int:poller fixed-delay="1000"  />-->
+        <!--task-executor="executor"-->
+        <!--<int-file:locker  />-->
+        <!--<int-file:nio-locker/>-->
+    </int-file:inbound-channel-adapter>
+
+
+    <!-- directory scanner org.springframework.integration.file.WatchServiceDirectoryScanner -->
+    <!--id.lsa.scb.spring.integration.scanner.CustomScanner-->
+    <bean id="nioLocker" class="org.springframework.integration.file.locking.NioFileLocker"/>
+
+    <bean id="watchDirectoryScanner" class="id.lsa.scb.spring.integration.scanner.AdrFileScanner">
+        <constructor-arg value="#{pojoUtil.sourceRootDir}"/>
+        <property name="autoStartup" value="true"/>
+        <property name="filter" ref="compositeFilter"/>
+        <property name="locker" ref="nioLocker"/>
+        <property name="adrUtil" ref="pojoUtil"/>
+        <!--<property name="running" value="true"/>-->
+
+    </bean>
+
+    <int-stream:stdout-channel-adapter channel="filesInChannel"/>
+    <int-stream:stderr-channel-adapter channel="filesInChannel"/>
+
+    <!--<int:service-activator input-channel="filesInChannel" ref="fileHandler"/>-->
+
+    <!--important-->
+    <bean id="metadataStore" class="org.springframework.integration.metadata.PropertiesPersistingMetadataStore"/>
+    <bean id="acceptAll" class="org.springframework.integration.file.filters.AcceptAllFileListFilter"/>
+
+
+    <bean id="compositeFilter" class="org.springframework.integration.file.filters.CompositeFileListFilter">
+        <constructor-arg>
+            <list>
+                <bean id="filterAllFiles" class="id.lsa.scb.spring.integration.filter.EntireFileFilter">
+                    <property name="adrUtil" ref="pojoUtil"/>
+                </bean>
+                <!-- ========= ============== -->
+                <!-- uncomment this to enable metadatastore in order to prevent reread same file during restart -->
+                <!-- ==========  ============ -->
+                <bean id="acceptOnceFilter"
+                class="org.springframework.integration.file.filters.FileSystemPersistentAcceptOnceFileListFilter">
+
+                <constructor-arg name="store" ref="metadataStore"/>
+                <constructor-arg name="prefix" value="test-"/>
+                <property name="flushOnUpdate" value="true"/>
+
+                </bean>
+            </list>
+        </constructor-arg>
+    </bean>
+
+    <!--<bean name="metadataStore" class="org.springframework.integration.metadata.PropertiesPersistingMetadataStore">-->
+    <!--<property name="baseDirectory" value="/tmp/"/>-->
+    <!--</bean>-->
+
+    <!--<int-stream:stdout-channel-adapter id="reply.ImportJsonChannel"/>-->
+    <int-stream:stderr-channel-adapter channel="errorChannel" append-newline="true"/>
+
+    <!-- IMPORTANT -->
+    <!--<int:filter input-channel="filesInChannel"-->
+    <!--output-channel="filesOutChannel"-->
+    <!--expression="@metadataStore.get(headers.businessKey) == null"/>-->
+    <int:poller id="globalPoller" default="true" fixed-delay="1000" max-messages-per-poll="10" task-executor="executor"
+                error-channel="errorChannel" receive-timeout="20000">
+        <!--<int:transactional transaction-manager="txManager"-->
+        <!--propagation="REQUIRED"-->
+        <!--isolation="REPEATABLE_READ"-->
+        <!--timeout="10000"-->
+        <!--read-only="false"/>-->
+
+    </int:poller>
+    <task:executor id="executor" pool-size="100"/>
+
+
+    <!-- OUTBOUND GATEWAY -->
+
+    <!--login gateway-->
+
+    <int:channel id="loginChannel">
+        <!--<int:queue/>-->
+    </int:channel>
+
+
+    <int:channel id="loginChannel.reply">
+        <!--<int:queue/>-->
+    </int:channel>
+
+    <int:channel id="loginChannel.Enriched">
+        <!--<int:queue/>-->
+        <int:dispatcher task-executor="executor"/>
+    </int:channel>
+
+    <int:channel id="loginChannel.recovery">
+        <!--<int:queue/>-->
+        <int:dispatcher task-executor="executor"/>
+    </int:channel>
+
+    <int:header-enricher input-channel="loginChannel" output-channel="loginChannel.Enriched">
+        <int:header name="Authorization" ref="auth" method="contructAut"/>
+    </int:header-enricher>
+
+    <int-http:outbound-gateway request-channel="loginChannel.Enriched"
+                               url="http://${datameer.host}:${datameer.port}/rest/user-management/logged-in-user?pretty"
+                               http-method="GET"
+                               extract-request-payload="true"
+                               expected-response-type="java.lang.String"
+                               reply-timeout="10000"
+                               reply-channel="loginChannel.reply"
+                               auto-startup="true"
+                               request-factory="clientHttpRequestFactory"
+                               transfer-cookies="true">
+
+        <!--<int:poller fixed-delay="1000" error-channel="errorChannel"/>-->
+        <int-http:request-handler-advice-chain>
+            <int:retry-advice max-attempts="3"
+                              recovery-channel="loginChannel.recovery">
+                <int:fixed-back-off interval="2000"/>
+            </int:retry-advice>
+
+        </int-http:request-handler-advice-chain>
+
+        <!--</int:poller>-->
+    </int-http:outbound-gateway>
+
+    <int:gateway id="loginGateway" default-request-channel="loginChannel.Enriched" error-channel="errorChannel"
+                 service-interface="id.lsa.scb.spring.integration.gateway.DatameerGateway"
+                 default-reply-timeout="7000" default-reply-channel="loginChannel.reply">
+
+        <int:method name="login">
+            <int:header name="Accept" value="application/json"/>
+            <int:header name="Content-Type" value="application/json"/>
+            <int:header name="Content-Encoding" value="gzip"/>
+            <int:header name="Accept-Encoding" value="gzip,deflate"/>
+            <int:header name="Vary" value="Accept-Encoding,User-Agent"/>
+            <int:header name="Accept-Charset" value="UTF-8"/>
+            <int:header name="Connection" value="Keep-Alive"/>
+
+        </int:method>
+
+    </int:gateway>
+
+
+    <bean id="auth" class="id.lsa.scb.spring.integration.transformers.AuthorizationHeader"/>
+    <!-- ========================== chain enricher and postJobs ============================= -->
+
+    <int:chain id="splitterchain" order="1" input-channel="outJsonMap" output-channel="ImportJsonChannel.json"
+               auto-startup="true">
+        <!--<int:poller ref="globalPoller"/>-->
+        <int:header-enricher>
+            <int:header name="workbook" expression="payload.getWorkBook()"/>
+            <int:header name="exportjob" expression="payload.getExportJob()"/>
+
+            <int:header name="tableName" expression="payload.getTableName()"/>
+            <!--<int:header name="countryCode" expression="payload.getCountryCode()"/>-->
+            <!--<int:header name="directoryPath" expression="payload.getDirectoryPath()"/>-->
+            <!--<int:header name="directoryCode" expression="payload.getDirectoryCode()"/>-->
+            <!--<int:header name="filePatternUsed" expression="payload.getFilePatternUsed()"/>-->
+            <!--<int:header name="targetDatabase" expression="payload.getTargetDatabase()"/>-->
+            <!--<int:header name="loadType" expression="payload.getLoadType()"/>-->
+            <!--<int:header name="ruleApplied" expression="payload.getRuleApplied()"/>-->
+            <!--<int:header name="overwrite" expression="payload.getOverwrite()"/>-->
+        </int:header-enricher>
+        <int:transformer expression="payload.getImportJob()"/>
+    </int:chain>
+
+    <int-stream:stdout-channel-adapter channel="ImportJsonChannel.json" append-newline="true"/>
+
+
+    <int:chain id="chainEnrich" input-channel="ImportJsonChannel.json" output-channel="ImportJsonChannel.Enriched"
+               order="2" auto-startup="true">
+        <!--<int:poller ref="globalPoller"/>-->
+
+        <int:object-to-json-transformer content-type="application/json"/>
+        <int:header-enricher>
+            <int:header name="Authorization" ref="auth" method="contructAut"/>
+        </int:header-enricher>
+    </int:chain>
+
+
+    <int:publish-subscribe-channel id="ImportJsonChannel.json" task-executor="executor">
+    </int:publish-subscribe-channel>
+
+    <int:publish-subscribe-channel id="ImportJsonChannel.recovery" task-executor="executor">
+    </int:publish-subscribe-channel>
+
+
+    <!--<int-stream:stdout-channel-adapter channel="ImportJsonChannel.Enriched" append-newline="true"/>-->
+
+    <int:publish-subscribe-channel id="ImportJsonChannel.Enriched" task-executor="executor">
+    </int:publish-subscribe-channel>
+
+    <int-http:outbound-gateway request-channel="ImportJsonChannel.Enriched"
+                               url="http://${datameer.host}:${datameer.port}/rest/import-job"
+                               http-method="POST"
+                               extract-request-payload="true"
+                               expected-response-type="java.util.HashMap"
+                               reply-timeout="10000"
+                               reply-channel="ImportJsonChannel.response"
+                               auto-startup="true"
+                               request-factory="clientHttpRequestFactory"
+                               transfer-cookies="true" order="1">
+        <!--<int:poller ref="globalPoller"/>-->
+        <int-http:request-handler-advice-chain>
+            <int:retry-advice max-attempts="2" >
+                <int:fixed-back-off interval="3000"/>
+            </int:retry-advice>
+        </int-http:request-handler-advice-chain>
+    </int-http:outbound-gateway>
+
+    <!--<int-stream:stdout-channel-adapter channel="ImportJsonChannel.response" />-->
+
+    <int:gateway id="importJobGatewayChain" default-request-channel="ImportJsonChannel.Enriched"
+                 error-channel="errorChannel"
+                 service-interface="id.lsa.scb.spring.integration.gateway.DatameerGateway"
+                 default-reply-timeout="7000" default-reply-channel="ImportJsonChannel.response">
+        <int:method name="postImportJob">
+            <int:header name="Accept" value="application/json"/>
+            <int:header name="Content-Type" value="application/json"/>
+        </int:method>
+    </int:gateway>
+
+    <int:publish-subscribe-channel id="ImportJsonChannel.response" task-executor="executor">
+        <!--<int:queue/>-->
+    </int:publish-subscribe-channel>
+
+    <int:publish-subscribe-channel id="ImportJsonChannel.filtered" task-executor="executor">
+        <!--<int:queue/>-->
+    </int:publish-subscribe-channel>
+
+
+    <!-- =================== chain workbook ========================= -->
+
+    <int:publish-subscribe-channel id="WorkbookChannel.request" task-executor="executor">
+    </int:publish-subscribe-channel>
+
+    <int:chain id="workbookChainChannel" input-channel="ImportJsonChannel.response"
+               output-channel="WorkbookChannel.request">
+
+        <int:header-enricher>
+            <int:header name="importJobResponse" expression="payload"/>
+        </int:header-enricher>
+
+        <int:filter ref="responseFilter" method="isImportResponse" discard-channel="errorChannel"/>
+        <int:transformer expression="headers['workbook']"/>
+    </int:chain>
+
+    <bean id="responseFilter" class="id.lsa.scb.spring.integration.routers.ResponseFilter"/>
+
+    <int:publish-subscribe-channel id="WorkbookChannel.request.json" task-executor="executor">
+    </int:publish-subscribe-channel>
+
+    <int-stream:stdout-channel-adapter channel="WorkbookChannel.request" append-newline="true"/>
+
+    <int:object-to-json-transformer input-channel="WorkbookChannel.request"
+                                    output-channel="WorkbookChannel.request.json" content-type="application/json"/>
+
+    <int-http:outbound-gateway request-channel="WorkbookChannel.request.json"
+                               url="http://${datameer.host}:${datameer.port}/rest/workbook"
+                               http-method="POST"
+                               extract-request-payload="true"
+                               expected-response-type="java.util.HashMap"
+                               reply-timeout="10000"
+                               reply-channel="WorkbookChannel.reply"
+                               auto-startup="true"
+                               request-factory="clientHttpRequestFactory" transfer-cookies="true">
+
+        <int-http:request-handler-advice-chain>
+            <int:retry-advice max-attempts="3">
+                <int:fixed-back-off interval="2000"/>
+            </int:retry-advice>
+        </int-http:request-handler-advice-chain>
+    </int-http:outbound-gateway>
+
+    <int:publish-subscribe-channel id="WorkbookJsonChannel.recovery">
+    </int:publish-subscribe-channel>
+
+    <int:gateway id="workBookGateway" default-request-channel="WorkbookChannel.request.json"
+                 error-channel="errorChannel"
+                 service-interface="id.lsa.scb.spring.integration.gateway.DatameerGateway"
+                 default-reply-timeout="7000" default-reply-channel="WorkbookChannel.reply">
+
+        <int:method name="postWorkbook">
+        </int:method>
+    </int:gateway>
+
+    <int-stream:stdout-channel-adapter channel="WorkbookChannel.reply" append-newline="true"/>
+
+    <int:publish-subscribe-channel id="WorkbookChannel.reply" task-executor="executor"/>
+
+
+    <!-- ================ chain exportJob =========================== -->
+    <int:publish-subscribe-channel id="ExportJob.request" task-executor="executor">
+    </int:publish-subscribe-channel>
+
+    <int:chain id="exportChainChannel" input-channel="WorkbookChannel.reply"
+               output-channel="ExportJob.request">
+
+        <int:header-enricher>
+            <int:header name="workBookResponse" expression="payload"/>
+        </int:header-enricher>
+
+        <int:filter ref="responseFilter" method="workBookResponseFilter" discard-channel="errorChannel"/>
+        <int:transformer expression="headers['exportjob']"/>
+    </int:chain>
+
+    <int:publish-subscribe-channel id="ExportJob.request.json" task-executor="executor">
+    </int:publish-subscribe-channel>
+
+    <int-stream:stdout-channel-adapter channel="ExportJob.request" append-newline="true"/>
+
+    <int:object-to-json-transformer input-channel="ExportJob.request"
+                                    output-channel="ExportJob.request.json" content-type="application/json"/>
+
+    <int-http:outbound-gateway request-channel="ExportJob.request.json"
+                               url="http://${datameer.host}:${datameer.port}/rest/export-job"
+                               http-method="POST"
+                               extract-request-payload="true"
+                               expected-response-type="java.util.HashMap"
+                               reply-timeout="10000"
+                               reply-channel="ExportJob.reply"
+                               auto-startup="true"
+                               request-factory="clientHttpRequestFactory" transfer-cookies="true">
+
+        <int-http:request-handler-advice-chain>
+            <int:retry-advice max-attempts="3">
+                <int:fixed-back-off interval="2000"/>
+            </int:retry-advice>
+        </int-http:request-handler-advice-chain>
+    </int-http:outbound-gateway>
+
+    <int:publish-subscribe-channel id="ExportJob.recovery">
+    </int:publish-subscribe-channel>
+
+    <int:gateway id="exportJobGateway" default-request-channel="ExportJob.request.json"
+                 error-channel="errorChannel"
+                 service-interface="id.lsa.scb.spring.integration.gateway.DatameerGateway"
+                 default-reply-timeout="7000" default-reply-channel="ExportJob.reply">
+
+        <int:method name="postExportJob">
+        </int:method>
+    </int:gateway>
+
+    <int:publish-subscribe-channel id="ExportJob.reply" task-executor="executor"/>
+
+    <int-stream:stdout-channel-adapter channel="ExportJob.reply" append-newline="true"/>
+
+    <!-- ============== start job chain =============== -->
+    <!-- start importJob -->
+    <int:publish-subscribe-channel id="StartImportJob.request" task-executor="executor">
+    </int:publish-subscribe-channel>
+
+    <int:publish-subscribe-channel id="StartImportJob.response" task-executor="executor">
+    </int:publish-subscribe-channel>
+
+
+    <int:publish-subscribe-channel id="StartImportJob.recovery" task-executor="executor">
+        <int:interceptors>
+            <int:wire-tap channel="logger"/>
+        </int:interceptors>
+    </int:publish-subscribe-channel>
+
+    <!-- important -->
+    <int:chain id="startImportJobChain" input-channel="ExportJob.reply"
+               output-channel="StartImportJob.request">
+
+        <int:header-enricher>
+            <int:header name="exportResponse" expression="payload"/>
+        </int:header-enricher>
+
+        <int:filter ref="responseFilter" method="exportJobFilter" discard-channel="errorChannel"/>
+        <int:transformer expression="headers['importJobResponse']"/>
+    </int:chain>
+
+
+    <int-http:outbound-gateway
+            url="http://${datameer.host}:${datameer.port}/rest/job-execution?configuration={configId}"
+            request-channel="StartImportJob.request"
+            reply-channel="StartImportJob.response"
+            http-method="POST"
+            expected-response-type="java.util.HashMap"
+            extract-request-payload="true"
+            reply-timeout="7000"
+            transfer-cookies="true"
+            auto-startup="true"
+    >
+
+        <int-http:uri-variable name="configId" expression="payload.get('configuration-id')"/>
+        <!---->
+        <int-http:request-handler-advice-chain>
+            <int:retry-advice max-attempts="3" send-timeout="10000">
+                <int:fixed-back-off interval="2000"/>
+            </int:retry-advice>
+        </int-http:request-handler-advice-chain>
+
+    </int-http:outbound-gateway>
+    <!---->
+    <!--</int-http:outbound-gateway>-->
+
+    <int:gateway id="startImportJobGateway" default-request-channel="StartImportJob.request"
+                 error-channel="errorChannel"
+                 service-interface="id.lsa.scb.spring.integration.gateway.StartJobGateway"
+                 default-reply-timeout="10000" default-reply-channel="StartImportJob.response">
+        <int:method name="postStartJob"/>
+    </int:gateway>
+
+
+    <int-stream:stdout-channel-adapter channel="StartImportJob.response"/>
+
+
+   <!-- important -->
+    <!-- ======================================= -->
+    <!-- check start import job status -->
+
+    <int:publish-subscribe-channel id="checkImportJob.request" task-executor="executor">
+    </int:publish-subscribe-channel>
+
+    <int:publish-subscribe-channel id="checkImportJob.response" task-executor="executor">
+    </int:publish-subscribe-channel>
+
+
+    <int:publish-subscribe-channel id="checkImportJob.recovery" task-executor="executor">
+        <int:interceptors>
+            <int:wire-tap channel="logger"/>
+        </int:interceptors>
+    </int:publish-subscribe-channel>
+
+<!--create service activator to start this part-->
+    <int:chain id="checkImportJobChain" input-channel="StartImportJob.response"
+               output-channel="checkImportJob.request">
+
+        <int:header-enricher>
+            <int:header name="startImportResponse" expression="payload"/>
+            <int:header name="checkerType" value="importJobChecker"/>
+        </int:header-enricher>
+
+        <int:filter ref="responseFilter" method="startJobFilter" discard-channel="errorChannel"/>
+        <int:transformer expression="headers['importJobResponse']"/>
+    </int:chain>
+
+
+    <!-- will be used when we need to check start workbook -->
+    <!--<int:publish-subscribe-channel id="StartWorkbookJob.response" task-executor="executor">-->
+
+    <!--</int:publish-subscribe-channel>-->
+
+    <!--<int:chain id="checkWorkJobChain" input-channel="StartWorkbookJob.response"-->
+               <!--output-channel="checkImportJob.request">-->
+
+        <!--<int:header-enricher>-->
+            <!--&lt;!&ndash;<int:header name="startImportResponse" expression="payload"/>&ndash;&gt;-->
+            <!--<int:header name="checkerType" value="workBookChecker"/>-->
+        <!--</int:header-enricher>-->
+
+        <!--<int:filter ref="responseFilter" method="startJobFilter" discard-channel="errorChannel"/>-->
+        <!--<int:transformer expression="headers['workBookResponse']"/>-->
+    <!--</int:chain>-->
+
+
+    <!--&lt;!&ndash; will be used when we need to check start workbook &ndash;&gt;-->
+    <!--<int:publish-subscribe-channel id="StartExportJob.response" task-executor="executor">-->
+    <!--</int:publish-subscribe-channel>-->
+
+    <!--<int:chain id="checkExportJobChain" input-channel="StartExportJob.response"-->
+               <!--output-channel="checkImportJob.request">-->
+
+        <!--<int:header-enricher>-->
+            <!--&lt;!&ndash;<int:header name="startImportResponse" expression="payload"/>&ndash;&gt;-->
+            <!--<int:header name="checkerType" value="exportJobChecker"/>-->
+        <!--</int:header-enricher>-->
+
+        <!--<int:filter ref="responseFilter" method="startJobFilter" discard-channel="errorChannel"/>-->
+        <!--<int:transformer expression="headers['exportJobResponse']"/>-->
+    <!--</int:chain>-->
+
+    <int-http:outbound-gateway
+            url="http://${datameer.host}:${datameer.port}/rest/job-configuration/job-status/{configId}"
+            request-channel="checkImportJob.request"
+            reply-channel="checkImportJob.response"
+            http-method="GET"
+            expected-response-type="java.util.HashMap"
+            extract-request-payload="true"
+            reply-timeout="7000"
+            transfer-cookies="true"
+            auto-startup="true">
+
+        <int-http:uri-variable name="configId" expression="payload.get('configuration-id')"/>
+        <!---->
+        <int-http:request-handler-advice-chain>
+            <int:retry-advice max-attempts="6" send-timeout="10000" >
+                <int:exponential-back-off initial="1000" multiplier="1.1" maximum="600000" />
+            </int:retry-advice>
+        </int-http:request-handler-advice-chain>
+
+    </int-http:outbound-gateway>
+
+    <int:gateway id="checkImportJobStatusGateway" default-request-channel="checkImportJob.request"
+                 error-channel="errorChannel"
+                 service-interface="id.lsa.scb.spring.integration.gateway.StartJobGateway"
+                 default-reply-timeout="10000" default-reply-channel="checkImportJob.response">
+        <int:method name="checkStartJobStatus">
+        </int:method>
+    </int:gateway>
+
+    <int-stream:stdout-channel-adapter channel="checkImportJob.response"/>
+
+    <int:publish-subscribe-channel id="importJobStatus.response" task-executor="executor">
+    </int:publish-subscribe-channel>
+
+    <!--<int:router id="responseRouter" input-channel="responseApiJobs" ref="responseRouterClass" apply-sequence="true"-->
+    <!--method="isReturnSuccess" auto-startup="true" >-->
+    <!--&lt;!&ndash;<int:poller ref="globalPoller"/>&ndash;&gt;-->
+    <!--</int:router>-->
+
+    <!--<int:router id="routerRepeatAdvice" ref=""/>-->
+
+    <!-- =========================================== -->
+
+    <!-- start workbook-->
+
+    <!--<int:publish-subscribe-channel id="StartWorkbookJob.request" task-executor="executor">-->
+    <!--</int:publish-subscribe-channel>-->
+
+    <!--<int:publish-subscribe-channel id="StartWorkbookJob.response" task-executor="executor">-->
+    <!--</int:publish-subscribe-channel>-->
+
+
+    <!--<int:publish-subscribe-channel id="StartWorkbookJob.recovery" task-executor="executor">-->
+    <!--<int:interceptors>-->
+    <!--<int:wire-tap channel="logger"/>-->
+    <!--</int:interceptors>-->
+    <!--</int:publish-subscribe-channel>-->
+
+    <!--<int:chain id="startWorkbookJobChain" input-channel="StartImportJob.response"-->
+    <!--output-channel="StartWorkbookJob.request">-->
+
+    <!--<int:header-enricher>-->
+    <!--<int:header name="startImportResponse" expression="payload"/>-->
+    <!--</int:header-enricher>-->
+
+    <!--<int:filter ref="responseFilter" method="startJobFilter" discard-channel="errorChannel"/>-->
+    <!--<int:transformer expression="headers['workBookResponse']"/>-->
+    <!--</int:chain>-->
+
+
+    <!--<int-http:outbound-gateway-->
+    <!--url="http://${datameer.host}:${datameer.port}/rest/job-execution?configuration={configId}"-->
+    <!--request-channel="StartWorkbookJob.request"-->
+    <!--reply-channel="StartWorkbookJob.response"-->
+    <!--http-method="POST"-->
+    <!--expected-response-type="java.util.HashMap"-->
+    <!--extract-request-payload="true"-->
+    <!--reply-timeout="7000"-->
+    <!--transfer-cookies="true"-->
+    <!--auto-startup="true"-->
+    <!--&gt;-->
+
+    <!--<int-http:uri-variable name="configId" expression="payload.get('configuration-id')"/>-->
+    <!--&lt;!&ndash;&ndash;&gt;-->
+    <!--<int-http:request-handler-advice-chain>-->
+    <!--<int:retry-advice max-attempts="3" send-timeout="10000">-->
+    <!--<int:fixed-back-off interval="2000"/>-->
+    <!--</int:retry-advice>-->
+    <!--</int-http:request-handler-advice-chain>-->
+
+    <!--</int-http:outbound-gateway>-->
+    <!---->
+    <!--</int-http:outbound-gateway>-->
+
+    <!--<int:gateway id="startWorkbookJobGateway" default-request-channel="StartWorkbookJob.request" error-channel="errorChannel"-->
+    <!--service-interface="id.lsa.scb.spring.integration.gateway.StartJobGateway"-->
+    <!--default-reply-timeout="10000" default-reply-channel="StartWorkbookJob.response">-->
+    <!--</int:gateway>-->
+    <!--<int-stream:stdout-channel-adapter channel="StartWorkbookJob.response"/>-->
+
+    <!--&lt;!&ndash;&ndash;&gt;-->
+    <!--&lt;!&ndash;   &ndash;&gt;-->
+    <!--&lt;!&ndash; start ExportJob &ndash;&gt;-->
+    <!--<int:publish-subscribe-channel id="StartExportJob.request" task-executor="executor">-->
+    <!--</int:publish-subscribe-channel>-->
+
+    <!--<int:publish-subscribe-channel id="StartExportJob.response" task-executor="executor">-->
+    <!--</int:publish-subscribe-channel>-->
+
+
+    <!--<int:publish-subscribe-channel id="StartExportJob.recovery" task-executor="executor">-->
+    <!--<int:interceptors>-->
+    <!--<int:wire-tap channel="logger"/>-->
+    <!--</int:interceptors>-->
+    <!--</int:publish-subscribe-channel>-->
+
+    <!--<int:chain id="startExportJobChain" input-channel="StartWorkbookJob.response"-->
+    <!--output-channel="StartExportJob.request">-->
+
+    <!--<int:header-enricher>-->
+    <!--<int:header name="startWorkbookResponse" expression="payload"/>-->
+    <!--</int:header-enricher>-->
+
+    <!--<int:filter ref="responseFilter" method="startJobFilter" discard-channel="errorChannel"/>-->
+    <!--<int:transformer expression="headers['exportResponse']"/>-->
+    <!--</int:chain>-->
+
+
+    <!--<int-http:outbound-gateway-->
+    <!--url="http://${datameer.host}:${datameer.port}/rest/job-execution?configuration={configId}"-->
+    <!--request-channel="StartExportJob.request"-->
+    <!--reply-channel="StartExportJob.response"-->
+    <!--http-method="POST"-->
+    <!--expected-response-type="java.util.HashMap"-->
+    <!--extract-request-payload="true"-->
+    <!--reply-timeout="7000"-->
+    <!--transfer-cookies="true"-->
+    <!--auto-startup="true"-->
+    <!--&gt;-->
+
+    <!--<int-http:uri-variable name="configId" expression="payload.get('configuration-id')"/>-->
+    <!--&lt;!&ndash;&ndash;&gt;-->
+    <!--<int-http:request-handler-advice-chain>-->
+    <!--<int:retry-advice max-attempts="3" send-timeout="10000">-->
+    <!--<int:fixed-back-off interval="2000"/>-->
+    <!--</int:retry-advice>-->
+    <!--</int-http:request-handler-advice-chain>-->
+
+    <!--</int-http:outbound-gateway>-->
+    <!--&lt;!&ndash;&ndash;&gt;-->
+    <!--&lt;!&ndash;</int-http:outbound-gateway>&ndash;&gt;-->
+
+    <!--<int:gateway id="startExportJobGateway" default-request-channel="StartExportJob.request" error-channel="errorChannel"-->
+    <!--service-interface="id.lsa.scb.spring.integration.gateway.StartJobGateway"-->
+    <!--default-reply-timeout="10000" default-reply-channel="StartExportJob.response">-->
+    <!--</int:gateway>-->
+
+    <!--<int-stream:stdout-channel-adapter channel="StartExportJob.response"/>-->
+
+    <!---->
+
+    <int:publish-subscribe-channel id="logger"/>
+
+
+    <int:logging-channel-adapter id="loggingAdapter" channel="logger" level="DEBUG"/>
+
+
+    <int:channel id="responseApiJobState">
+        <int:queue/>
+        <int:interceptors>
+            <int:wire-tap channel="logger"/>
+        </int:interceptors>
+    </int:channel>
+
+    <int:channel id="response.StartJob">
+        <int:dispatcher/>
+    </int:channel>
+
+
+    <bean id="httpComponentsMessageSender" class="org.springframework.ws.transport.http.HttpComponentsMessageSender">
+        <property name="credentials">
+            <bean class="org.apache.http.auth.UsernamePasswordCredentials">
+                <constructor-arg value="admin"></constructor-arg>
+                <constructor-arg value="admin"></constructor-arg>
+            </bean>
+        </property>
+    </bean>
+
+    <bean id="clientHttpRequestFactory" class="org.springframework.http.client.HttpComponentsClientHttpRequestFactory">
+        <property name="httpClient" value="#{httpComponentsMessageSender.httpClient}"/>
+    </bean>
+
+    <!--loging-->
+
+
+    <int:logging-channel-adapter id="logger" level="DEBUG"/>
+    <int:message-history/>
+
+    <!--error channel-->
+    <int:publish-subscribe-channel id="errorChannel.output" task-executor="executor">
+    </int:publish-subscribe-channel>
+
+    <int-file:outbound-channel-adapter id="exceptionList"
+                                       mode="APPEND"
+                                       auto-create-directory="true"
+                                       channel="errorChannel.output"
+                                       auto-startup="true"
+                                       append-new-line="true"
+                                       filename-generator-expression="'errorLog.csv'"
+                                       directory="log"/>
+    <!--filename-generator-expression="'processingLog.csv'"-->
+    <!--error channel-->
+
+
+    <!--success channel-->
+    <int:publish-subscribe-channel id="successChannel.output" task-executor="executor">
+    </int:publish-subscribe-channel>
+
+    <int-file:outbound-channel-adapter id="successList"
+                                       mode="APPEND"
+                                       auto-create-directory="true"
+                                       channel="successChannel.output"
+                                       auto-startup="true"
+                                       append-new-line="true"
+                                       filename-generator-expression="'successLog.csv'"
+                                       directory="log"/>
+    <!--filename-generator-expression="'processingLog.csv'"-->
+    <!--success channel-->
+
+
+    <int:channel id="shutdownChannel">
+        <int:queue/>
+    </int:channel>
+    <bean id="lastMessageBean" class="id.lsa.scb.spring.integration.handlers.LastMessageProcessor"/>
+
+    <int:inbound-channel-adapter ref="lastMessageBean" method="msSinceLastProcessed" channel="shutdownFilterChannel">
+        <int:poller ref="globalPoller"/>
+    </int:inbound-channel-adapter>
+
+    <int:filter input-channel="shutdownFilterChannel" output-channel="shutdownChannel"
+                expression="payload>20000"></int:filter>
+
+    <!-- ============================ database gateway ======================= -->
+    <int:publish-subscribe-channel id="insertLog" task-executor="executor"></int:publish-subscribe-channel>
+    <int:publish-subscribe-channel id="insertLog.result" task-executor="executor"></int:publish-subscribe-channel>
+
+    <bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource" destroy-method="close">
+        <property name="driverClassName" value="${ADR_CONFIGURATION_DRIVER}" />
+        <property name="url" value="${ADR_PROCESSING_URL}" />
+        <property name="username" value="${ADR_PROCESSING_USERNAME}" />
+        <property name="password" value="${ADR_PROCESSING_PASSWORD}" />
+    </bean>
+
+    <bean id="logProcessMapper" class="id.lsa.scb.mappers.LogProcessMapper"/>
+    <bean id="logProcess" class="id.lsa.scb.mappers.LogProcess"/>
+
+    <int:gateway id="logProccessGateway" service-interface="id.lsa.scb.spring.integration.gateway.DatabaseGateway" default-request-channel="insertLog">
+    <int:method name="insertProccessLog"
+                request-channel="insertLog"
+                request-timeout="5000"
+                reply-channel="insertLog.result"
+                reply-timeout="5000"/>
+    </int:gateway>
+<!-- uncoment this part to enable loging to mysql-->
+    <int-jdbc:outbound-channel-adapter channel="insertLog" query="INSERT INTO adr_process_logs(COUNTRY_CODE,DIRECTORY_PATH,FILENAME,TARGET_DATABASE,TARGET_TABLENAME,LOG_TIME,RULE_APPLIED,STATUS,STAGE,MESSAGE)VALUES(:COUNTRY_CODE,:DIRECTORY_PATH,:FILENAME,:TARGET_DATABASE,:TARGET_TABLENAME,:LOG_TIME,:RULE_APPLIED,:STATUS,:STAGE,:MESSAGE);"
+                                       data-source="dataSource" sql-parameter-source-factory="requestSource" auto-startup="true" />
+
+
+    <bean id="requestSource" class="org.springframework.integration.jdbc.ExpressionEvaluatingSqlParameterSourceFactory">
+        <property name="parameterExpressions">
+            <map>
+                <entry key="COUNTRY_CODE" value="payload.getCountryCode()"/>
+                <entry key="DIRECTORY_PATH" value="payload.getDirectoryPath()"/>
+                <entry key="FILENAME" value="payload.getFileName()"/>
+                <entry key="TARGET_DATABASE" value="payload.getTargetDatabase()"/>
+                <entry key="TARGET_TABLENAME" value="payload.getTargetTableName()"/>
+                <entry key="LOG_TIME" value="payload.getLogTime()"/>
+                <entry key="RULE_APPLIED" value="payload.getRuleApplied()"/>
+                <entry key="STATUS" value="payload.getStatus()"/>
+                <entry key="STAGE" value="payload.getStage()"/>
+                <entry key="MESSAGE" value="payload.getMessage()"/>
+            </map>
+        </property>
+    </bean>
+
+
+</beans>

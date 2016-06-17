@@ -1,0 +1,84 @@
+-- login
+mysql -u root -p
+
+--create user->
+CREATE USER 'harji'@'localhost' IDENTIFIED BY 'datameer';
+
+
+--create database
+create database adr;
+
+
+--grant user to database
+GRANT ALL PRIVILEGES ON adr.* TO 'harji'@'localhost' WITH GRANT OPTION;
+
+
+--use the database
+use adr;
+
+-- create config table
+CREATE TABLE adr_configs(
+    ID INT NOT NULL AUTO_INCREMENT,
+    COUNTRY_CODE VARCHAR(6) NOT NULL UNIQUE,
+    SOURCE_DIRECTORY VARCHAR(100) NOT NULL,
+    DIRECTORY_CODE VARCHAR(100) NOT NULL,
+    FILE_PATTERN VARCHAR(500) NOT NULL,
+    TARGET_DATABASE VARCHAR(100) NOT NULL,
+    INCLUDING_SUB_FOLDER VARCHAR(200),
+    FREQUENCY INT,
+    RETENTION_COUNT INT,
+    ACTIVE boolean default true,
+    EXTENSIONS VARCHAR(200) NOT NULL,
+   SEQUENCE VARCHAR(5),
+   EXCLUDING_SUBFOLDER VARCHAR(300),
+    PRIMARY KEY (ID));
+
+-- insert example config
+INSERT INTO adr_configs(COUNTRY_CODE,SOURCE_DIRECTORY,DIRECTORY_CODE,FILE_PATTERN,TARGET_DATABASE,INCLUDING_SUB_FOLDER,FREQUENCY,RETENTION_COUNT,ACTIVE,EXTENSIONS,SEQUENCE,EXCLUDING_SUBFOLDER) VALUES('id','/home/harji/Workspace/Project/BigData/Project-Src/scb_project/sasdir','id','_(\\d{2}|\\d{4})[0-1][0-9];_hist_[dwm][0-9][0-9];_(([Jj](ANUARY|anuary))|([Ff](EBRUARY|ebruary))|([Mm](ARCH|arch))|([Aa](PRIL|pril))|[Mm](AY|ay)|([Jj](UNE|une))|([Jj](ULY|uly))|([Aa](UGUST|ugust))|([Ss](EPTEMBER|eptember))|([Oo](CTOBER|ctober))|[Nn](OVEMBER|ovember)|[Dd](ECEMBER|ecember))(_|)\\d\\d\\d\\d;_(\\d{2}|\\d{4})[0-1][0-9][0-3][0-9]','coba','id,sg',0,0,true,'sas7bdat','01','id_02;id_03');
+
+-- new version
+
+CREATE TABLE adr_configs(
+    ID INT NOT NULL AUTO_INCREMENT,
+    COUNTRY_CODE VARCHAR(6) NOT NULL,
+    SOURCE_DIRECTORY VARCHAR(500) NOT NULL,
+    DIRECTORY_CODE VARCHAR(100) NOT NULL,
+    FILE_PATTERN VARCHAR(500) NOT NULL,
+    TARGET_DATABASE VARCHAR(100) NOT NULL,
+    INCLUDING_SUB_FOLDER VARCHAR(200),
+    FREQUENCY INT,
+    RETENTION_COUNT INT,
+    ACTIVE boolean default true,
+    EXTENSIONS VARCHAR(200) NOT NULL,
+    SEQUENCE VARCHAR(5),
+    EXCLUDING_SUBFOLDER VARCHAR(300),
+    RULE VARCHAR(10),
+    LOAD_TYPE VARCHAR(10),
+    PRIMARY KEY (ID));
+/Users/harjiwigaasmoko/Project/bigdata/scb_project/sasdir
+
+
+INSERT INTO adr_configs(COUNTRY_CODE,SOURCE_DIRECTORY,DIRECTORY_CODE,FILE_PATTERN,TARGET_DATABASE,INCLUDING_SUB_FOLDER,FREQUENCY,RETENTION_COUNT,ACTIVE,EXTENSIONS,SEQUENCE,EXCLUDING_SUBFOLDER,RULE,LOAD_TYPE) VALUES('id','/home/harji/Workspace/Project/BigData/Project-Src/scb_project/sasdir','id','_(\\d{2}|\\d{4})[0-1][0-9];_hist_[dwm][0-9][0-9];_(([Jj](ANUARY|anuary))|([Ff](EBRUARY|ebruary))|([Mm](ARCH|arch))|([Aa](PRIL|pril))|[Mm](AY|ay)|([Jj](UNE|une))|([Jj](ULY|uly))|([Aa](UGUST|ugust))|([Ss](EPTEMBER|eptember))|([Oo](CTOBER|ctober))|[Nn](OVEMBER|ovember)|[Dd](ECEMBER|ecember))(_|)\\d\\d\\d\\d;_(\\d{2}|\\d{4})[0-1][0-9][0-3][0-9]','coba','id,sg',0,0,true,'sas7bdat','01','id_02;id_03','01', 'D');
+/Users/harjiwigaasmoko/Project/bigdata/scb_project/sasdir/id/id_01
+
+
+-- new version 2
+
+CREATE TABLE `adr_configs` (
+  `ID` int(11) NOT NULL AUTO_INCREMENT,
+  `COUNTRY_CODE` varchar(6) NOT NULL,
+  `DIRECTORY_PATH` varchar(100) NOT NULL,
+  `DIRECTORY_CODE` varchar(100) NOT NULL,
+  `FILE_PATTERN` varchar(500) DEFAULT NULL,
+  `TARGET_DATABASE` varchar(100) NOT NULL,
+  `LOAD_TYPE` varchar(1) DEFAULT NULL,
+  `RULE` varchar(50) DEFAULT NULL,
+  `SEQUENCE` varchar(5) DEFAULT NULL,
+  `EXCLUDING_SUBFOLDER` varchar(300) DEFAULT NULL,
+  `ACTIVE` tinyint(1) DEFAULT '1',
+  `OVERWRITE` varchar(1) DEFAULT NULL,
+  PRIMARY KEY (`ID`)
+)
+
+INSERT INTO `adr_configs` VALUES (1,'id','/apps/adr/sas/id/id_01','001','*.sas7bdat','id','H','replaceMxxWithYYYYMM','01','id_03',1,NULL),(2,'id','/apps/adr/sas/id/id_02','002','*.sas7bdat','id','H','replaceMxxWithYYYYMM','02','id_03',1,NULL),(3,'id','/apps/adr/sas/id/id_01','001','*_m01.sas7bdat','id','S',NULL,'03','id_03',1,NULL);
+

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:int="http://www.springframework.org/schema/integration"
+       xmlns:int-http="http://www.springframework.org/schema/integration/http"
+       xmlns:oxm="http://www.springframework.org/schema/oxm"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:int-file="http://www.springframework.org/schema/integration/file"
+       xmlns:task="http://www.springframework.org/schema/task"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+            http://www.springframework.org/schema/integration http://www.springframework.org/schema/integration/spring-integration.xsd
+            http://www.springframework.org/schema/integration/http http://www.springframework.org/schema/integration/http/spring-integration-http.xsd
+            http://www.springframework.org/schema/oxm http://www.springframework.org/schema/oxm/spring-oxm.xsd
+            http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd
+            http://www.springframework.org/schema/integration/file http://www.springframework.org/schema/integration/file/spring-integration-file.xsd
+            http://www.springframework.org/schema/task http://www.springframework.org/schema/task/spring-task.xsd">
+
+    <int:channel id="importJobClient" datatype="id.lsa.scb.mappers.importjob.ImportJob"></int:channel>
+    <int:channel id="workBookClient" datatype="id.lsa.scb.mappers.workbook.WorkBook"></int:channel>
+    <int:channel id="exportJobClient" datatype="id.lsa.scb.mappers.exportjob.ExportJob"></int:channel>
+
+    <bean id="importConstructor" class="id.lsa.scb.constructors.ImportConstructor"
+          autowire="default"/>
+
+    <int:channel id="filesIn">
+        <int:queue/>
+    </int:channel>
+    <int:channel id="outJsonMap">
+        <int:queue/>
+    </int:channel>
+
+    <int:channel id="errorChannel"></int:channel>
+
+    <int:transformer id="sasTransformer" input-channel="filesIn" method="process" output-channel="outJsonMap">
+        <bean class="id.lsa.scb.spring.integration.transformers.FieldToJson"/>
+    </int:transformer>
+
+
+    <!--<bean id="sasTransformer" class="id.lsa.scb.spring.integration.FieldToJson"/>-->
+    <bean id="propertyPlaceholder" class="id.lsa.scb.utils.PropertiesUtil">
+        <!--<property name="ignoreResourceNotFound" value="true"/>-->
+        <property name="locations">
+            <list>
+                <value>config.properties</value>
+            </list>
+        </property>
+    </bean>
+
+    <int-file:inbound-channel-adapter id="filesIn" directory="file:${sas.dir}" prevent-duplicates="true"
+                                      ignore-hidden="true">
+        <int:poller id="poller" fixed-rate="100" task-executor="executor"/>
+        <int-file:nio-locker/>
+    </int-file:inbound-channel-adapter>
+    <task:executor id="executor" pool-size="10"/>
+
+</beans>
